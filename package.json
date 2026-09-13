@@ -1,0 +1,29 @@
+{
+  "name": "neohives-chatbot",
+  "version": "1.0.0",
+  "description": "Neohives sales assistant backend — answers pricing/onboarding questions, captures lead details, and submits them to a webhook.",
+  "type": "module",
+  "main": "src/index.js",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "start": "node src/index.js",
+    "dev": "node --watch src/index.js",
+    "token": "node scripts/mint-token.js",
+    "replay": "node scripts/replay-failed.js",
+    "test": "node --test \"test/**/*.test.js\""
+  },
+  "dependencies": {
+    "cors": "^2.8.5",
+    "dotenv": "^17.4.2",
+    "express": "^5.2.1",
+    "express-rate-limit": "^8.7.0",
+    "jsonwebtoken": "^9.0.3",
+    "openai": "^7.15.0",
+    "pino": "^10.3.1",
+    "zod": "^4.6.2"
+  },
+  "license": "UNLICENSED",
+  "private": true
+}

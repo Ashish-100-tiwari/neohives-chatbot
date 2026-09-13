@@ -1,0 +1,647 @@
+{
+  "_note": "EDIT ME. This file is the bot's only source of truth for services, pricing, process and claims. The system prompt forbids the model from stating anything that is not in here. Sourced from the published neohives.com pages (home, about, ai-services, service, pricing, case-studies).",
+  "lastUpdated": "2026-09-13",
+  "sources": [
+    "https://www.neohives.com/",
+    "https://www.neohives.com/about",
+    "https://www.neohives.com/ai-services",
+    "https://www.neohives.com/service",
+    "https://www.neohives.com/pricing",
+    "https://www.neohives.com/case-studies"
+  ],
+
+  "company": {
+    "name": "Neo Hives IT Solutions",
+    "shortName": "Neo Hives",
+    "website": "https://www.neohives.com",
+    "tagline": "Boutique AI engineering and software development — production-ready AI agents, automation, private RAG systems, web and mobile apps, and scalable cloud software.",
+    "businessType": "Boutique AI engineering and software development company.",
+    "contactEmail": "info.neohives@gmail.com",
+    "salesEmail": "info.neohives@gmail.com",
+    "phone": "+91 7982015467",
+    "location": "Delhi, India",
+    "timezone": "IST / UTC+5:30",
+    "workingHours": "Mon–Fri, 10:00–19:00 IST",
+    "responseSla": "A senior engineer / AI architect responds to inquiries within 24 hours.",
+    "timezoneOverlap": "4+ hours of daily overlap with US Eastern and Pacific business hours.",
+    "marketsServed": ["India", "United States", "Canada", "Australia", "United Kingdom", "Middle East"],
+    "currency": "USD",
+    "secondaryCurrency": "INR"
+  },
+
+  "positioning": {
+    "statement": "Neo Hives IT Solutions builds production-ready AI agents, automation systems, private document intelligence/RAG systems, web applications, mobile applications, and scalable cloud software for growing businesses.",
+    "model": "Builder-led: the architects who scope projects are the engineers who design, build and deploy them.",
+    "emphasis": "Ships production systems rather than stopping at prototypes or demos."
+  },
+
+  "differentiators": [
+    {
+      "id": "builder-led",
+      "name": "Builder-led",
+      "detail": "Clients communicate directly with technical engineers. No unnecessary layers of account managers."
+    },
+    {
+      "id": "fixed-price",
+      "name": "Fixed-price engagements",
+      "detail": "Projects are scoped around milestones and outcomes, not open-ended hourly billing."
+    },
+    {
+      "id": "senior-engineers",
+      "name": "Direct technical communication",
+      "detail": "Senior engineers participate directly in projects."
+    },
+    {
+      "id": "us-overlap",
+      "name": "US timezone overlap",
+      "detail": "4+ hours of daily overlap with US Eastern and Pacific business hours."
+    },
+    {
+      "id": "ip-ownership",
+      "name": "Source-code / IP ownership",
+      "detail": "Clients receive 100% ownership of project code and IP."
+    },
+    {
+      "id": "secure-ai",
+      "name": "Security-focused AI deployment",
+      "detail": "Private VPC deployment, RBAC, audit logging and Zero Data Retention options are available for relevant AI engagements."
+    },
+    {
+      "id": "rapid-pilot",
+      "name": "Rapid AI pilots",
+      "detail": "Clients can validate an AI use case before committing to a larger production deployment."
+    }
+  ],
+
+  "services": [
+    {
+      "id": "ai-agents",
+      "name": "AI agents & automation",
+      "summary": "AI agents that perform multi-step business operations, not just answer questions.",
+      "examples": [
+        "Invoice and document processing",
+        "Customer onboarding",
+        "Lead qualification",
+        "Claims processing",
+        "Data extraction",
+        "ERP and CRM updates",
+        "Email processing",
+        "Approval and internal workflow automation"
+      ],
+      "integrations": ["Slack", "HubSpot", "Salesforce", "Linear", "PostgreSQL", "Email", "CRM systems", "ERP systems", "Spreadsheets", "Custom APIs"],
+      "notes": "Sensitive or low-confidence tasks can be routed to humans for approval. Actions can be audited.",
+      "startingPrice": null,
+      "pricingNote": "Priced via the published AI engagement models — see plans.",
+      "typicalTimeline": "See plans: 4–8 weeks for a production agent."
+    },
+    {
+      "id": "rag",
+      "name": "Private RAG / document AI",
+      "summary": "Private AI assistants that answer questions from the client's own documents, with source citations.",
+      "sources": ["PDFs", "SOPs", "Contracts", "Internal and engineering documentation", "Compliance documents", "Product specifications", "Support tickets", "Company knowledge bases"],
+      "capabilities": [
+        "Semantic search",
+        "Source citations with document/page references",
+        "Role-based access control",
+        "Continuous document synchronisation",
+        "Private knowledge bases",
+        "Answers 'information not found' when it cannot verify an answer"
+      ],
+      "useCases": [
+        "Customer support grounded in internal product documentation",
+        "Employee knowledge assistant for policies and SOPs",
+        "Legal/compliance search over contracts",
+        "Technical support over engineering documentation"
+      ],
+      "notes": "Designed to reduce hallucinations by grounding responses in the client's own documents.",
+      "startingPrice": null,
+      "pricingNote": "Priced via the published AI engagement models — see plans.",
+      "typicalTimeline": "See plans."
+    },
+    {
+      "id": "voice-ai",
+      "name": "Voice & multimodal AI",
+      "summary": "Conversational voice agents for phone-based operations and tier-1 support.",
+      "examples": ["Customer support", "Appointment scheduling", "Customer intake", "Order status", "Lead qualification"],
+      "capabilities": [
+        "Answers calls and handles interruptions",
+        "Schedules appointments",
+        "Checks information and updates CRM records",
+        "Transfers calls to humans",
+        "Provides conversation summaries",
+        "Multi-language support"
+      ],
+      "notes": "Complex conversations can be transferred to human operators.",
+      "startingPrice": null,
+      "pricingNote": "Priced via the published AI engagement models — see plans.",
+      "typicalTimeline": "See plans."
+    },
+    {
+      "id": "ai-evaluation",
+      "name": "AI evaluation & testing",
+      "summary": "AI quality engineering for organisations where a wrong AI answer creates operational, financial or legal risk.",
+      "examples": [
+        "Accuracy and regression testing",
+        "Hallucination detection",
+        "Prompt-injection testing",
+        "PII leakage protection",
+        "Latency and token-cost monitoring",
+        "Model drift monitoring",
+        "Golden datasets and continuous evaluation"
+      ],
+      "startingPrice": null,
+      "pricingNote": "Scoped per engagement. Do not quote a number.",
+      "typicalTimeline": "Scoped per engagement."
+    },
+    {
+      "id": "web",
+      "name": "Web development",
+      "summary": "Business websites, web applications, SaaS platforms and custom web platforms — modern, responsive, accessible and conversion-focused.",
+      "examples": ["Business websites", "Web applications", "SaaS platforms", "Custom web platforms", "SEO-friendly responsive sites"],
+      "flow": ["Requirement gathering", "Architecture/planning", "UI/UX", "Development", "Testing", "Deployment", "Post-launch support"],
+      "startingPrice": null,
+      "pricingNote": "NOT PUBLISHED. Depends on scope, integrations, design requirements and timeline. Never state a number — offer a fixed-price proposal after review.",
+      "typicalTimeline": null
+    },
+    {
+      "id": "mobile",
+      "name": "Mobile app development",
+      "summary": "iOS, Android and cross-platform apps, from concept through App Store launch.",
+      "examples": ["Native iOS", "Native Android", "Cross-platform"],
+      "flow": ["Concept", "UI/UX", "Development", "API integration", "Testing", "Deployment", "Post-launch support"],
+      "startingPrice": null,
+      "pricingNote": "NOT PUBLISHED. Never state a number — offer a fixed-price proposal after review.",
+      "typicalTimeline": null
+    },
+    {
+      "id": "uiux",
+      "name": "UI/UX design",
+      "summary": "User-centred design that produces intuitive interfaces aligned with the product and business goal.",
+      "examples": ["User research", "Information architecture", "Wireframes", "Prototypes", "Interface design", "Usability testing", "Design systems"],
+      "startingPrice": null,
+      "pricingNote": "NOT PUBLISHED. Never state a number.",
+      "typicalTimeline": null
+    },
+    {
+      "id": "testing",
+      "name": "Software testing",
+      "summary": "Finds issues before they reach users.",
+      "examples": ["Functional testing", "Performance testing", "Security testing", "Automated testing", "Regression testing", "Pre-launch testing"],
+      "startingPrice": null,
+      "pricingNote": "NOT PUBLISHED. Never state a number.",
+      "typicalTimeline": null
+    },
+    {
+      "id": "consulting",
+      "name": "IT consulting",
+      "summary": "Technology consulting on stack choice, product architecture, scaling infrastructure, digital transformation, whether AI is appropriate, automating operations and reducing technical cost.",
+      "notes": "Do not assume the client's technical requirements. Offer to evaluate requirements and recommend an architecture, then route to a discovery call.",
+      "startingPrice": null,
+      "pricingNote": "NOT PUBLISHED. Never state a number.",
+      "typicalTimeline": null
+    },
+    {
+      "id": "cloud",
+      "name": "Cloud & custom software",
+      "summary": "Scalable cloud-based systems and custom software engineering, including cloud architecture.",
+      "startingPrice": null,
+      "pricingNote": "NOT PUBLISHED. Never state a number.",
+      "typicalTimeline": null
+    },
+    {
+      "id": "marketing",
+      "name": "Digital marketing",
+      "summary": "Data-driven marketing focused on measurable outcomes: traffic, leads, reach, customer acquisition and ROI.",
+      "examples": ["SEO", "PPC", "Social media marketing", "Paid advertising", "Content marketing", "Lead generation", "Performance marketing"],
+      "startingPrice": null,
+      "pricingNote": "NOT PUBLISHED. Never state a number.",
+      "typicalTimeline": null
+    }
+  ],
+
+  "plans": [
+    {
+      "id": "ai-pilot",
+      "name": "Rapid AI Pilot / PoC",
+      "bestFor": "Validating a single AI use case before committing to a production build.",
+      "price": { "USD": "2,500–6,500", "USD_min": 2500, "USD_max": 6500 },
+      "duration": "2–3 weeks",
+      "billing": "fixed price",
+      "includes": [
+        "One targeted workflow",
+        "Working prototype",
+        "Sample-data testing",
+        "Prompt engineering",
+        "Accuracy evaluation",
+        "Architecture assessment",
+        "ROI feasibility report"
+      ],
+      "notIncluded": [],
+      "pricingNote": "The pilot cost is 100% credited toward the full production build if the client proceeds."
+    },
+    {
+      "id": "ai-production",
+      "name": "Production AI Agent",
+      "bestFor": "Deploying a real AI agent or private RAG assistant into live business operations.",
+      "price": { "USD": "12,500–24,500", "USD_min": 12500, "USD_max": 24500 },
+      "duration": "4–8 weeks",
+      "billing": "fixed price, milestone-based",
+      "includes": [
+        "Autonomous AI agent or private RAG assistant",
+        "CRM / ERP / helpdesk integrations",
+        "Slack and SQL integrations",
+        "Human-in-the-loop workflows",
+        "Audit trails",
+        "Zero Data Retention architecture",
+        "Security-focused VPC deployment",
+        "30-day post-launch warranty and monitoring"
+      ],
+      "notIncluded": [],
+      "pricingNote": "Range depends on scope and integrations. Final figure follows discovery."
+    },
+    {
+      "id": "ai-enterprise",
+      "name": "Enterprise AI Systems",
+      "bestFor": "Larger deployments spanning multiple teams and large document volumes.",
+      "price": { "USD": "32,000–55,000+", "USD_min": 32000, "USD_max": null },
+      "duration": "8–16 weeks",
+      "billing": "fixed price, milestone-based",
+      "includes": [
+        "Multiple teams and multi-agent systems",
+        "Large document volumes",
+        "Custom retrieval pipelines",
+        "Fine-tuning",
+        "Dedicated engineering team",
+        "Enterprise SLA",
+        "Drift detection",
+        "Continuous evaluation"
+      ],
+      "notIncluded": [],
+      "pricingNote": "Starts at $32,000 and is open-ended above $55,000 depending on scope. Route anything specific to a scoping call."
+    }
+  ],
+
+  "pricingScope": "The published price ranges above apply ONLY to the listed AI engagement models. Web, mobile, UI/UX, testing, consulting, cloud and digital-marketing projects have NO published price — they are quoted as fixed-price proposals after requirements review.",
+
+  "retainers": [],
+  "retainersNote": "No retainer or monthly pricing is published. If a visitor asks about ongoing support or a monthly arrangement, note that the Production AI Agent engagement includes a 30-day post-launch warranty and monitoring, and that anything beyond that is scoped with the team.",
+
+  "discounts": [
+    "Rapid AI Pilot: the pilot cost is 100% credited toward the full production build if the client proceeds."
+  ],
+
+  "paymentTerms": {
+    "projects": "Fixed-price engagements scoped around milestones and outcomes, rather than open-ended hourly billing. Exact milestone schedule is set out in the written proposal.",
+    "retainers": "Not published.",
+    "methods": [],
+    "taxes": "Not published — confirmed with the team during scoping.",
+    "note": "Do not state advance percentages, invoicing schedules or payment methods. None are published; route the question to the team."
+  },
+
+  "onboarding": {
+    "summary": "Seven stages from discovery to ongoing support. The exact process varies by project; for AI work a 2–3 week pilot often sits between scoping and the production build.",
+    "steps": [
+      {
+        "step": 1,
+        "name": "Discovery",
+        "duration": "Scheduled with the engineering team",
+        "detail": "Understand the business problem, users, existing systems, desired outcome, technical requirements, budget and timeline."
+      },
+      {
+        "step": 2,
+        "name": "Architecture & scope",
+        "duration": "Following discovery",
+        "detail": "Define technical architecture, integrations, deliverables, milestones, success criteria and project cost."
+      },
+      {
+        "step": 3,
+        "name": "Prototype / pilot",
+        "duration": "2–3 weeks (AI projects)",
+        "detail": "Validate feasibility, accuracy, ROI and workflow integration before the production build."
+      },
+      {
+        "step": 4,
+        "name": "Development",
+        "duration": "Per the agreed milestones",
+        "detail": "Build the production system."
+      },
+      {
+        "step": 5,
+        "name": "Testing",
+        "duration": "Per the agreed milestones",
+        "detail": "Functional, security and performance testing, plus AI evaluation and regression testing where relevant."
+      },
+      {
+        "step": 6,
+        "name": "Deployment",
+        "duration": "End of build",
+        "detail": "Deploy into the appropriate infrastructure, including a private client VPC where required."
+      },
+      {
+        "step": 7,
+        "name": "Monitoring & support",
+        "duration": "Post-launch",
+        "detail": "Monitor performance, accuracy, errors, AI drift, costs and operational reliability."
+      }
+    ],
+    "clientChecklist": [
+      "A description of the business problem and the current process",
+      "Which tools and systems are involved (CRM, ERP, helpdesk, databases)",
+      "Sample documents or data, if the project involves document AI",
+      "Required integrations and expected volumes",
+      "Security and data-handling requirements",
+      "One decision-maker who can approve scope"
+    ]
+  },
+
+  "security": {
+    "available": [
+      "Zero Data Retention architecture",
+      "Private cloud deployment",
+      "AWS VPC",
+      "Azure VPC",
+      "GCP VPC",
+      "Role-Based Access Control",
+      "TLS encryption",
+      "Audit logging",
+      "NDA",
+      "Data Processing Addendum"
+    ],
+    "deployment": "AI agents and vector stores can be deployed inside the client's own cloud VPC.",
+    "complianceStance": "The architecture is described as SOC 2 and HIPAA READY/ALIGNED.",
+    "doNotClaim": [
+      "Do NOT claim Neo Hives is ISO certified.",
+      "Do NOT claim SOC 2 certification — the published claim is 'SOC 2 ready/aligned', which is not the same thing.",
+      "Do NOT claim HIPAA certification — the published claim is 'HIPAA ready/aligned'.",
+      "Do NOT make absolute legal or security guarantees beyond what is listed here."
+    ],
+    "trainingDataAnswer": "Neo Hives offers Zero Data Retention architecture for relevant AI engagements. Project data can remain within a controlled deployment environment rather than being used to train a foundation model. Security requirements are reviewed during project scoping."
+  },
+
+  "techStack": {
+    "foundationModels": ["OpenAI models", "Anthropic Claude", "Llama", "DeepSeek", "Mistral", "Fine-tuned smaller language models"],
+    "orchestration": ["LangGraph", "LangChain", "CrewAI", "LlamaIndex", "Semantic Kernel", "DSPy"],
+    "vectorAndData": ["Pinecone", "Qdrant", "PostgreSQL", "pgvector", "Weaviate", "Milvus", "Hybrid BM25/search"],
+    "cloudAndEvaluation": ["AWS Bedrock", "Azure OpenAI", "Google Vertex AI", "Private VPC infrastructure", "LangSmith", "Arize Phoenix"],
+    "modelChoiceAnswer": "Neo Hives works with OpenAI models as well as other foundation-model providers. The right model depends on the project's requirements, cost, latency, privacy and accuracy needs. Never claim every project uses one particular model."
+  },
+
+  "clientProfile": [
+    "Startups",
+    "Small and medium-sized businesses",
+    "Growing businesses",
+    "US mid-market companies",
+    "Operations-heavy businesses",
+    "Companies with repetitive manual workflows",
+    "Companies with large internal document repositories",
+    "Companies building SaaS products",
+    "Businesses needing custom software",
+    "Businesses exploring AI automation"
+  ],
+
+  "caseStudies": [
+    {
+      "id": "ai-document-automation",
+      "name": "AI document automation",
+      "industry": "Operations & logistics",
+      "location": "United States",
+      "detail": "Processed invoices, bills of lading and vendor statements, validated information against ERP purchase orders, and routed uncertain cases to human reviewers.",
+      "results": [
+        "14,000+ documents per month",
+        "85% reduction in manual document handling",
+        "99.4% extraction accuracy",
+        "Average turnaround under 30 seconds",
+        "91%+ of incoming documents processed touchlessly",
+        "65+ operational staff hours reclaimed weekly"
+      ]
+    },
+    {
+      "id": "telematica-australia",
+      "name": "Telematica Australia",
+      "industry": "B2B services",
+      "location": "Australia",
+      "detail": "Managed Meta lead-generation campaigns with state-by-state reporting.",
+      "results": [
+        "3,624 inquiries in one month",
+        "A$12.48 average cost per inquiry",
+        "412,580 people reached",
+        "27% cost difference between the best and most expensive region"
+      ]
+    },
+    {
+      "id": "right-qlik-multimedia",
+      "name": "Right Qlik Multimedia",
+      "industry": "Multimedia",
+      "location": "India",
+      "results": [
+        "185,420 people reached",
+        "312,690 impressions",
+        "1.69 average frequency",
+        "59% of impressions reached someone new",
+        "Four states tracked separately"
+      ]
+    },
+    {
+      "id": "supriya-travels",
+      "name": "Supriya Travels of India",
+      "industry": "Travel",
+      "location": "New Delhi",
+      "detail": "Website built so different audiences could find relevant information while maintaining search visibility.",
+      "results": [
+        "20 live pages",
+        "6 destination guides",
+        "10 destinations in search filters",
+        "Dedicated Hajj and Umrah sections",
+        "Destination pages, visa services, ticketing and trade partner services"
+      ]
+    }
+  ],
+
+  "intentRouting": [
+    { "intent": "Automate repetitive work", "service": "ai-agents" },
+    { "intent": "AI that processes invoices", "service": "ai-agents" },
+    { "intent": "Chat with company documents", "service": "rag" },
+    { "intent": "AI trained on our documents", "service": "rag" },
+    { "intent": "AI customer support", "service": "rag" },
+    { "intent": "AI phone receptionist", "service": "voice-ai" },
+    { "intent": "AI appointment booking", "service": "voice-ai" },
+    { "intent": "Build a website", "service": "web" },
+    { "intent": "Build SaaS", "service": "web" },
+    { "intent": "Build a mobile app", "service": "mobile" },
+    { "intent": "Improve our app design", "service": "uiux" },
+    { "intent": "Test our software", "service": "testing" },
+    { "intent": "Need technology advice", "service": "consulting" },
+    { "intent": "Need SEO", "service": "marketing" },
+    { "intent": "Need Google/Meta ads", "service": "marketing" },
+    { "intent": "Need social media marketing", "service": "marketing" },
+    { "intent": "Need AI evaluation", "service": "ai-evaluation" },
+    { "intent": "Need cloud architecture", "service": "cloud" },
+    { "intent": "Need enterprise AI", "service": "ai-enterprise" }
+  ],
+
+  "qualification": {
+    "chatbotProject": {
+      "trigger": "Visitor says they want an AI chatbot.",
+      "questions": [
+        "What should the chatbot do — customer support, lead generation, internal knowledge, sales, appointment booking, something else?",
+        "Where should it work — website, WhatsApp, Slack, Microsoft Teams, mobile app, voice/phone, multiple channels?",
+        "Does it need access to company documents? If yes, route to Private RAG / document AI.",
+        "Does it need to take actions? If yes, route to AI agents & automation.",
+        "Does it need to handle phone calls? If yes, route to Voice AI."
+      ]
+    },
+    "automationProject": {
+      "trigger": "Visitor asks whether a business process can be automated.",
+      "questions": [
+        "What process do you want to automate?",
+        "What tools or software are currently involved?",
+        "How often does the process happen?",
+        "How much manual work does it require today?",
+        "What happens when something goes wrong?",
+        "Do you need human approval before certain actions?"
+      ]
+    },
+    "fieldsForSeriousProspects": [
+      "name",
+      "company",
+      "email",
+      "phone",
+      "country",
+      "industry",
+      "project type",
+      "business problem",
+      "desired solution",
+      "current technology",
+      "required integrations",
+      "number of users",
+      "expected volume",
+      "desired timeline",
+      "approximate budget"
+    ],
+    "note": "Never ask these as a form dump. Collect them conversationally, one at a time, across the chat."
+  },
+
+  "guardrails": [
+    "Never invent pricing. Only quote the published AI engagement ranges, and only when relevant.",
+    "Never invent timelines. Say the timeline depends on scope and integrations, and that a fixed timeline follows discovery.",
+    "Never promise features automatically. Say something 'can potentially be built' rather than 'we definitely support it'.",
+    "Never invent clients. Only mention the published case studies in this file.",
+    "Never claim certifications. The published stance is 'SOC 2 & HIPAA ready/aligned', not certified.",
+    "Never answer a security, privacy or data-handling question from memory. Call get_security and use its published wording. Never turn a hedged capability ('Zero Data Retention is available for relevant engagements') into an absolute promise ('we never train on your data') — the difference is contractual.",
+    "Never give technical recommendations without asking about requirements, existing infrastructure, integrations, users, scale and security needs.",
+    "Escalate detailed technical architecture, custom quotations, security assessments, contracts and implementation plans to an engineer."
+  ],
+
+  "faqs": [
+    {
+      "q": "What does Neo Hives do?",
+      "a": "Neo Hives provides AI engineering, software development, web and mobile development, UI/UX, IT consulting, software testing and digital marketing services."
+    },
+    {
+      "q": "Do you build AI agents?",
+      "a": "Yes. Neo Hives builds production AI agents that execute multi-step business workflows and integrate with business systems."
+    },
+    {
+      "q": "Do you build RAG systems?",
+      "a": "Yes. Neo Hives builds private document intelligence/RAG systems that answer questions from company documents with source references."
+    },
+    {
+      "q": "Can you integrate AI with our CRM?",
+      "a": "Yes. AI agents can integrate with CRM, ERP, helpdesk, databases, Slack and custom APIs, depending on the project."
+    },
+    {
+      "q": "Can you build a mobile app?",
+      "a": "Yes. Neo Hives develops native and cross-platform mobile applications for iOS and Android."
+    },
+    {
+      "q": "Can you build websites?",
+      "a": "Yes. Neo Hives develops responsive websites and custom web applications."
+    },
+    {
+      "q": "Do you provide UI/UX design?",
+      "a": "Yes — user research, information architecture, wireframes, prototypes, interface design, usability testing and design systems."
+    },
+    {
+      "q": "Do you provide software testing?",
+      "a": "Yes. Testing can include functional, performance, security, automated and regression testing."
+    },
+    {
+      "q": "Do you provide digital marketing?",
+      "a": "Yes. Services include SEO, PPC, social media, paid advertising and content marketing."
+    },
+    {
+      "q": "Where is Neo Hives located?",
+      "a": "Neo Hives is based in Delhi, India (IST / UTC+5:30) and works with international clients."
+    },
+    {
+      "q": "Do you work with US clients?",
+      "a": "Yes. Neo Hives works with US and other international clients and maintains 4+ hours of daily overlap with US Eastern and Pacific business hours."
+    },
+    {
+      "q": "Do you offer a pilot?",
+      "a": "Yes. AI rapid pilots are structured as 2–3 week engagements, and the pilot cost is 100% credited toward the production build if you proceed."
+    },
+    {
+      "q": "How much does an AI pilot cost?",
+      "a": "The published range is $2,500–$6,500 for a 2–3 week Rapid AI Pilot."
+    },
+    {
+      "q": "How much does a production AI agent cost?",
+      "a": "The published range is $12,500–$24,500 for a 4–8 week Production AI Agent engagement."
+    },
+    {
+      "q": "How much does an enterprise AI system cost?",
+      "a": "The published range starts at $32,000–$55,000+ over 8–16 weeks, depending on scope."
+    },
+    {
+      "q": "How much will my website or app cost?",
+      "a": "Project pricing depends on the scope, integrations, design requirements and timeline. Neo Hives can review your requirements and provide a fixed-price proposal. There is no published price for web, mobile, UI/UX, testing, consulting or marketing work."
+    },
+    {
+      "q": "How do I get a quote?",
+      "a": "Discuss the project on a discovery call. Neo Hives then scopes requirements, milestones and pricing into a fixed-price proposal."
+    },
+    {
+      "q": "How quickly will someone respond?",
+      "a": "A senior engineer or AI architect responds to inquiries within 24 hours."
+    },
+    {
+      "q": "Who owns the code and IP?",
+      "a": "Clients receive 100% ownership of project code and IP."
+    },
+    {
+      "q": "Do you sign an NDA?",
+      "a": "Yes. NDAs and a Data Processing Addendum are available as part of an engagement."
+    },
+    {
+      "q": "Will you train AI models on our company data?",
+      "a": "Neo Hives offers Zero Data Retention architecture for relevant AI engagements. Your project data can remain within a controlled deployment environment rather than being used to train a foundation model. Security requirements are reviewed during project scoping."
+    },
+    {
+      "q": "Do you use OpenAI?",
+      "a": "Yes. Neo Hives works with OpenAI models as well as Anthropic Claude, Llama, DeepSeek, Mistral and fine-tuned smaller models. The right model depends on the project's requirements, cost, latency, privacy and accuracy needs."
+    },
+    {
+      "q": "Can you deploy inside our own cloud?",
+      "a": "Yes. AI agents and vector stores can be deployed inside your own AWS, Azure or GCP VPC, with RBAC, TLS and audit logging."
+    },
+    {
+      "q": "Are you SOC 2 or HIPAA certified?",
+      "a": "The architecture is described as SOC 2 and HIPAA ready/aligned, which is not the same as being certified. A team member can walk you through the specific controls."
+    },
+    {
+      "q": "How do you bill — hourly or fixed price?",
+      "a": "Neo Hives works on fixed-price engagements scoped around milestones and outcomes, rather than open-ended hourly billing."
+    }
+  ],
+
+  "escalationTriggers": [
+    "Custom or enterprise AI pricing, and any request for a specific quotation",
+    "Pricing for web, mobile, UI/UX, testing, consulting or marketing projects",
+    "Detailed technical architecture or implementation plans",
+    "Security assessments, compliance questionnaires and certification questions",
+    "Legal or contractual questions, including NDAs and DPAs",
+    "Complaints about existing work or billing disputes",
+    "Anything this knowledge base does not answer"
+  ]
+}

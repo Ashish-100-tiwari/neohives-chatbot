@@ -1,0 +1,217 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Neo Hives assistant — test console</title>
+    <style>
+      :root {
+        color-scheme: light dark;
+        --bg: #0f1115;
+        --panel: #171a21;
+        --line: #262b36;
+        --text: #e7e9ee;
+        --muted: #9aa3b2;
+        --accent: #f5b301;
+      }
+      * { box-sizing: border-box; }
+      body {
+        margin: 0;
+        font: 15px/1.55 ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+        background: var(--bg);
+        color: var(--text);
+        display: grid;
+        place-items: center;
+        min-height: 100vh;
+        padding: 24px;
+      }
+      main { width: 100%; max-width: 720px; }
+      header { display: flex; align-items: baseline; gap: 10px; margin-bottom: 14px; flex-wrap: wrap; }
+      h1 { font-size: 17px; margin: 0; letter-spacing: -0.01em; }
+      .badge { font-size: 12px; color: var(--muted); }
+      .badge button { padding: 2px 8px; font-size: 11px; background: transparent; color: var(--muted); }
+      #log {
+        background: var(--panel);
+        border: 1px solid var(--line);
+        border-radius: 12px;
+        padding: 16px;
+        height: 60vh;
+        overflow-y: auto;
+        display: flex;
+        flex-direction: column;
+        gap: 12px;
+      }
+      .msg { max-width: 82%; padding: 10px 13px; border-radius: 12px; white-space: pre-wrap; }
+      .user { align-self: flex-end; background: #23303f; border-bottom-right-radius: 4px; }
+      .bot { align-self: flex-start; background: #1e222b; border-bottom-left-radius: 4px; }
+      .tool { align-self: center; font-size: 12px; color: var(--muted); font-family: ui-monospace, monospace; }
+      .err { align-self: center; font-size: 12px; color: #ff9b9b; }
+      form { display: flex; gap: 8px; margin-top: 12px; }
+      input, button {
+        font: inherit;
+        border-radius: 10px;
+        border: 1px solid var(--line);
+        padding: 11px 13px;
+        background: var(--panel);
+        color: var(--text);
+      }
+      input { flex: 1; }
+      input:focus-visible, button:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+      button { background: var(--accent); color: #14161a; border-color: transparent; font-weight: 600; cursor: pointer; }
+      button[disabled] { opacity: 0.55; cursor: not-allowed; }
+      footer { margin-top: 10px; font-size: 12px; color: var(--muted); font-family: ui-monospace, monospace; word-break: break-all; }
+    </style>
+  </head>
+  <body>
+    <main>
+      <header>
+        <h1>Neo Hives assistant</h1>
+        <span class="badge" id="status"></span>
+        <span class="badge"><button id="reset" type="button">reset</button></span>
+        <span class="badge"><button id="retoken" type="button">set token</button></span>
+      </header>
+      <div id="log" role="log" aria-live="polite"></div>
+      <form id="form">
+        <input id="input" placeholder="Ask about pricing or how to get started…" autocomplete="off" required />
+        <button id="send" type="submit">Send</button>
+      </form>
+      <footer id="state"></footer>
+    </main>
+
+    <script type="module">
+      // Mirrors how a real frontend behaves: the token comes from build-time env
+      // (here: a prompt, stored once) and the conversation lives in localStorage.
+      const GREETING =
+        "Hi — I'm Hive, from Neo Hives IT Solutions. I can help with AI agents and automation, private RAG/document AI, voice AI, web and mobile apps, UI/UX, testing, cloud engineering, IT consulting or digital marketing. What are you looking to build or improve?";
+      const TOKEN_KEY = 'nh_token';
+      const STATE_KEY = 'nh_state';
+      const TRANSCRIPT_KEY = 'nh_transcript';
+
+      const log = document.getElementById('log');
+      const form = document.getElementById('form');
+      const input = document.getElementById('input');
+      const send = document.getElementById('send');
+      const status = document.getElementById('status');
+      const stateLine = document.getElementById('state');
+
+      const bubble = (cls, text = '') => {
+        const el = document.createElement('div');
+        el.className = `msg ${cls}`;
+        el.textContent = text;
+        log.append(el);
+        log.scrollTop = log.scrollHeight;
+        return el;
+      };
+
+      function token() {
+        let value = localStorage.getItem(TOKEN_KEY);
+        if (!value) {
+          value = prompt('Paste the JWT from `npm run token`:')?.trim();
+          if (value) localStorage.setItem(TOKEN_KEY, value);
+        }
+        return value;
+      }
+
+      const showStatus = () => {
+        const hasToken = Boolean(localStorage.getItem(TOKEN_KEY));
+        const hasState = Boolean(localStorage.getItem(STATE_KEY));
+        status.textContent = `token ${hasToken ? 'set' : 'missing'} · state ${hasState ? 'in localStorage' : 'empty'}`;
+      };
+
+      document.getElementById('reset').addEventListener('click', () => {
+        localStorage.removeItem(STATE_KEY);
+        localStorage.removeItem(TRANSCRIPT_KEY);
+        log.replaceChildren();
+        stateLine.textContent = '';
+        bubble('bot', GREETING);
+        showStatus();
+      });
+
+      document.getElementById('retoken').addEventListener('click', () => {
+        localStorage.removeItem(TOKEN_KEY);
+        token();
+        showStatus();
+      });
+
+      form.addEventListener('submit', async (event) => {
+        event.preventDefault();
+        const message = input.value.trim();
+        if (!message) return;
+        const auth = token();
+        if (!auth) return bubble('err', 'No token set.');
+
+        input.value = '';
+        send.disabled = true;
+        bubble('user', message);
+        const target = bubble('bot', '');
+
+        try {
+          const res = await fetch('/api/chat', {
+            method: 'POST',
+            headers: { 'content-type': 'application/json', authorization: `Bearer ${auth}` },
+            body: JSON.stringify({
+              message,
+              state: localStorage.getItem(STATE_KEY) ?? undefined,
+              stream: true,
+              pageUrl: location.href,
+              locale: navigator.language,
+            }),
+          });
+
+          if (!res.ok || !res.body?.pipeThrough) {
+            const body = await res.json().catch(() => ({}));
+            target.textContent = body.reply ?? body.message ?? `HTTP ${res.status} — ${body.error ?? 'failed'}`;
+            if (body.state) localStorage.setItem(STATE_KEY, body.state);
+            return;
+          }
+
+          const reader = res.body.pipeThrough(new TextDecoderStream()).getReader();
+          let buffer = '';
+          while (true) {
+            const { value, done } = await reader.read();
+            if (done) break;
+            buffer += value;
+            const frames = buffer.split('\n\n');
+            buffer = frames.pop() ?? '';
+            for (const frame of frames) {
+              const name = frame.match(/^event: (.+)$/m)?.[1];
+              const data = JSON.parse(frame.match(/^data: (.+)$/m)?.[1] ?? '{}');
+              if (name === 'token') {
+                target.textContent += data.token;
+                log.scrollTop = log.scrollHeight;
+              } else if (name === 'tool') {
+                bubble('tool', `⚙ ${data.name}`);
+              } else if (name === 'done') {
+                if (!target.textContent) target.textContent = data.reply;
+                localStorage.setItem(STATE_KEY, data.state);
+                localStorage.setItem(TRANSCRIPT_KEY, JSON.stringify(data.transcript));
+                stateLine.textContent = `turn ${data.turns} · lead ${JSON.stringify(data.lead)} · missing: ${
+                  data.missingFields.join(', ') || 'none'
+                }${data.submitted ? ` · SENT ${data.submitted.reference}` : ''} · state ${data.state.length}B`;
+              } else if (name === 'error') {
+                target.textContent = data.message;
+                if (data.state) localStorage.setItem(STATE_KEY, data.state);
+              }
+            }
+          }
+        } catch (err) {
+          target.textContent = `Error: ${err.message}`;
+        } finally {
+          send.disabled = false;
+          showStatus();
+          input.focus();
+        }
+      });
+
+      // Repaint the thread from localStorage, the way the real widget should.
+      const saved = JSON.parse(localStorage.getItem(TRANSCRIPT_KEY) ?? '[]');
+      if (saved.length) {
+        bubble('tool', 'resumed from localStorage');
+        for (const message of saved) bubble(message.role === 'user' ? 'user' : 'bot', message.content);
+      } else {
+        bubble('bot', GREETING);
+      }
+      showStatus();
+    </script>
+  </body>
+</html>
