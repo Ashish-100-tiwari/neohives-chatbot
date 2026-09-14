@@ -88,29 +88,131 @@ export function buildPayload({ event, conversation, lead, reference, extra = {},
   };
 }
 
-/**
- * Delivers a payload to the configured webhook with exponential backoff.
- * Every payload is also appended to data/leads.jsonl first, so a lead is never
- * lost even if the webhook is down or unconfigured.
- */
-export async function deliver(payload, { url = config.webhook.url } = {}) {
-  await appendJsonl(LEAD_LOG, payload);
-
-  if (!url) {
-    logger.warn({ reference: payload.reference }, 'LEAD_WEBHOOK_URL not set — lead saved locally only');
-    return { ok: true, delivery: 'skipped', reference: payload.reference };
+export function isFormspreeUrl(url) {
+  try {
+    return /(^|\.)formspree\.io$/i.test(new URL(url).hostname);
+  } catch {
+    return false;
   }
+}
 
-  const rawBody = JSON.stringify(payload);
+/** Formspree rejects oversized submissions, and a 40-turn transcript is big. */
+const MAX_FIELD_CHARS = 4000;
+
+const clamp = (value, max = MAX_FIELD_CHARS) => {
+  const text = String(value);
+  return text.length <= max ? text : `${text.slice(0, max - 1)}…`;
+};
+
+const LABELS = {
+  name: 'Name',
+  email: 'Email',
+  phone: 'Phone',
+  company: 'Company',
+  country: 'Country',
+  industry: 'Industry',
+  service_interest: 'Service interest',
+  requirement: 'Requirement',
+  current_technology: 'Current technology',
+  required_integrations: 'Required integrations',
+  expected_volume: 'Expected volume',
+  number_of_users: 'Number of users',
+  budget_range: 'Budget range',
+  timeline: 'Timeline',
+  preferred_contact_time: 'Preferred contact time',
+  notes: 'Notes',
+};
+
+/**
+ * Formspree is a form-to-email service, not a JSON sink: it emails each
+ * top-level key as a labelled row and ignores nesting. So the nested payload is
+ * flattened, and a readable `message` digest is included because that is the
+ * field Formspree renders as the body of the notification email.
+ */
+export function buildFormspreePayload(payload) {
+  const lead = payload.lead ?? {};
+  const context = payload.context ?? {};
+  const who = lead.name || lead.email || 'unknown visitor';
+  const what = lead.service_interest || 'general enquiry';
+  const kind = payload.event === 'lead.escalated' ? 'Escalation' : payload.event === 'lead.updated' ? 'Lead update' : 'New lead';
+
+  const rows = Object.entries(LABELS)
+    .filter(([field]) => lead[field])
+    .map(([field, label]) => `${label}: ${lead[field]}`);
+
+  const transcript = (payload.transcript ?? [])
+    .map((message) => `${message.role === 'user' ? 'Visitor' : 'Hive'}: ${message.content}`)
+    .join('\n\n');
+
+  const flat = {
+    // Formspree reads `email` as the reply-to address for the notification.
+    email: lead.email ?? '',
+    name: lead.name ?? '',
+    _subject: clamp(`${kind}: ${what} — ${who} [${payload.reference}]`, 200),
+    message: clamp(
+      [
+        `${kind} from the website chatbot.`,
+        payload.summary ? `\nSummary: ${payload.summary}` : '',
+        `\n${rows.join('\n')}`,
+        `\nReference: ${payload.reference}`,
+        `Submitted: ${payload.submitted_at}`,
+        context.page_url ? `Page: ${context.page_url}` : '',
+      ]
+        .filter(Boolean)
+        .join('\n'),
+    ),
+    event: payload.event,
+    reference: payload.reference,
+    submitted_at: payload.submitted_at,
+    source: payload.source,
+    ...Object.fromEntries(
+      Object.keys(LABELS)
+        .filter((field) => field !== 'name' && field !== 'email' && lead[field])
+        .map((field) => [field, clamp(lead[field])]),
+    ),
+    page_url: context.page_url ?? '',
+    referrer: context.referrer ?? '',
+    session_id: payload.session?.id ?? '',
+    message_count: String(payload.session?.message_count ?? 0),
+    transcript: clamp(transcript, 8000),
+  };
+
+  if (payload.escalation) {
+    flat.escalation_reason = clamp(payload.escalation.reason ?? '');
+    flat.escalation_urgency = payload.escalation.urgency ?? 'normal';
+  }
+  if (payload.summary) flat.summary = clamp(payload.summary);
+  if (payload.updated_fields) flat.updated_fields = payload.updated_fields.join(', ');
+
+  // Formspree treats empty strings as missing fields in its own validation.
+  return Object.fromEntries(Object.entries(flat).filter(([, value]) => value !== ''));
+}
+
+/** Every destination the lead should reach, deduplicated by URL. */
+function destinations({ url, formspreeUrl } = {}) {
+  const generic = url === undefined ? config.webhook.url : url;
+  const formspree = formspreeUrl === undefined ? config.webhook.formspreeUrl : formspreeUrl;
+  const out = [];
+  if (generic) out.push({ name: isFormspreeUrl(generic) ? 'formspree' : 'webhook', url: generic });
+  if (formspree && formspree !== generic) out.push({ name: 'formspree', url: formspree });
+  return out;
+}
+
+/** POSTs one payload to one destination, with exponential backoff. */
+async function post(destination, payload) {
+  const formspree = destination.name === 'formspree' || isFormspreeUrl(destination.url);
+  const rawBody = JSON.stringify(formspree ? buildFormspreePayload(payload) : payload);
   const signature = signPayload(rawBody);
   let lastError = null;
 
   for (let attempt = 1; attempt <= Math.max(1, config.webhook.maxRetries); attempt += 1) {
     try {
-      const response = await fetch(url, {
+      const response = await fetch(destination.url, {
         method: 'POST',
         headers: {
           'content-type': 'application/json',
+          // Without this Formspree answers with a 302 to its thank-you page.
+          accept: 'application/json',
           'user-agent': `${config.company.name}-chatbot/1.0`,
           'x-neohives-event': payload.event,
           'x-neohives-timestamp': String(Date.now()),
@@ -121,11 +223,17 @@ export async function deliver(payload, { url = config.webhook.url } = {}) {
       });
 
       if (response.ok) {
-        logger.info({ reference: payload.reference, attempt, status: response.status }, 'lead delivered');
-        return { ok: true, delivery: 'delivered', reference: payload.reference, status: response.status };
+        logger.info(
+          { reference: payload.reference, destination: destination.name, attempt, status: response.status },
+          'lead delivered',
+        );
+        return { ok: true, status: response.status };
       }
 
-      lastError = new Error(`webhook responded ${response.status}`);
+      // Formspree explains a rejected submission in the body; without it a 4xx
+      // is impossible to debug (wrong form id, disabled form, spam block).
+      const detail = await response.text().catch(() => '');
+      lastError = new Error(`${destination.name} responded ${response.status}${detail ? `: ${clamp(detail, 300)}` : ''}`);
       if (!RETRYABLE_STATUS.has(response.status)) break;
     } catch (err) {
       lastError = err;
@@ -133,14 +241,64 @@ export async function deliver(payload, { url = config.webhook.url } = {}) {
 
     if (attempt < config.webhook.maxRetries) {
       const backoff = 400 * 2 ** (attempt - 1);
-      logger.warn({ attempt, backoff, err: lastError?.message }, 'webhook delivery failed — retrying');
+      logger.warn(
+        { destination: destination.name, attempt, backoff, err: lastError?.message },
+        'webhook delivery failed — retrying',
+      );
       await sleep(backoff);
     }
   }
 
-  logger.error({ reference: payload.reference, err: lastError?.message }, 'webhook delivery failed permanently');
-  await appendJsonl(DEAD_LETTER, { failed_at: new Date().toISOString(), error: lastError?.message, payload });
+  return { ok: false, error: lastError?.message ?? 'delivery failed' };
+}
+
+/**
+ * Delivers a payload to every configured destination (the generic JSON webhook
+ * and/or Formspree) with exponential backoff. Every payload is appended to
+ * data/leads.jsonl first, so a lead is never lost even if both are down.
+ *
+ * @returns delivery: 'delivered' (all ok) | 'partial' | 'queued' (all failed)
+ *          | 'skipped' (nothing configured)
+ */
+export async function deliver(payload, options = {}) {
+  await appendJsonl(LEAD_LOG, payload);
+
+  const targets = destinations(options);
+  if (!targets.length) {
+    logger.warn(
+      { reference: payload.reference },
+      'no LEAD_WEBHOOK_URL or NEXT_PUBLIC_FORMSPREE_WEBHOOK set — lead saved locally only',
+    );
+    return { ok: true, delivery: 'skipped', reference: payload.reference };
+  }
+
+  const results = await Promise.all(
+    targets.map(async (destination) => ({ destination: destination.name, ...(await post(destination, payload)) })),
+  );
+
+  const failed = results.filter((result) => !result.ok);
+  const delivery = failed.length === 0 ? 'delivered' : failed.length === results.length ? 'queued' : 'partial';
+
+  if (failed.length) {
+    logger.error(
+      { reference: payload.reference, failed: failed.map((f) => `${f.destination}: ${f.error}`) },
+      'webhook delivery failed permanently',
+    );
+    await appendJsonl(DEAD_LETTER, {
+      failed_at: new Date().toISOString(),
+      destinations: failed.map((f) => f.destination),
+      error: failed.map((f) => f.error).join('; '),
+      payload,
+    });
+  }
+
   // The lead itself is safe on disk, so the caller can still hand the visitor a
-  // reference; `delivery` tells ops that a manual replay is needed.
-  return { ok: true, delivery: 'queued', reference: payload.reference, error: lastError?.message };
+  // reference; `delivery` tells ops whether a manual replay is needed.
+  return {
+    ok: true,
+    delivery,
+    reference: payload.reference,
+    results,
+    ...(failed.length ? { error: failed.map((f) => f.error).join('; ') } : {}),
+  };
 }

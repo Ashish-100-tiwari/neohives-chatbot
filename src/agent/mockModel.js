@@ -8,6 +8,23 @@ import { randomUUID } from 'node:crypto';
 // Trailing punctuation excluded, so "email is sam@acme.io, thanks" extracts cleanly.
 const EMAIL_RE = /[^\s@]+@[^\s@]+\.[a-zA-Z]{2,}/;
 
+// Crude intent→service guess so mock mode still exercises the auto-submit path,
+// which needs both an email and a service_interest.
+const SERVICE_HINTS = [
+  [/\bvoice|call ?centre|call center|ivr|phone\b/, 'Voice AI'],
+  [/\brag\b|document|knowledge base|pdf|contract/, 'Private RAG / document AI'],
+  [/\bagent|automat|workflow|chatbot|copilot\b/, 'AI agents & automation'],
+  [/\bmobile|android|ios|app store\b/, 'Mobile app development'],
+  [/\bwebsite|web app|portal|dashboard|landing\b/, 'Web development'],
+  [/\bdesign|ui\b|ux|figma\b/, 'UI/UX design'],
+  [/\btest|qa\b|bug|evaluat/, 'QA, testing & AI evaluation'],
+  [/\bcloud|aws|azure|gcp|devops|kubernetes\b/, 'Cloud engineering'],
+  [/\bseo|marketing|ads|campaign\b/, 'Digital marketing'],
+  [/\bconsult|advis|strategy\b/, 'IT consulting'],
+];
+
+const guessService = (text) => SERVICE_HINTS.find(([pattern]) => pattern.test(text))?.[1];
+
 const toolCall = (name, args) => ({
   id: `call_${randomUUID().slice(0, 8)}`,
   type: 'function',
@@ -34,6 +51,8 @@ export function mockCompletion(messages) {
           toolCall('update_lead', {
             email: lastUser.match(EMAIL_RE)[0],
             requirement: lastUser,
+            // Falls back to a placeholder so the lead still reaches the webhook.
+            service_interest: guessService(text) ?? 'General enquiry',
           }),
         ],
       },
@@ -71,10 +90,13 @@ export function mockCompletion(messages) {
     );
   }
   if (lastTool?.name === 'update_lead') {
+    const reference = String(lastTool.content ?? '').match(/NH-\d{6}-[0-9A-F]{6}/)?.[0];
     return wrap(
       {
         role: 'assistant',
-        content: '[mock] Got it, thanks. Could you tell me your name and the company you represent?',
+        content: reference
+          ? `[mock] Got it, thanks — I've sent this to our team, your reference is ${reference} and a senior engineer will reply within one business day. Could you tell me your name and the company you represent?`
+          : '[mock] Got it, thanks. Could you tell me your name and the company you represent?',
       },
       'stop',
     );

@@ -28,12 +28,13 @@ const entries = raw
   .filter(Boolean)
   .map((line) => JSON.parse(line));
 
-if (!config.webhook.url) {
-  console.error('LEAD_WEBHOOK_URL is not set — nothing to replay to.');
+const targets = [config.webhook.url, config.webhook.formspreeUrl].filter(Boolean);
+if (!targets.length) {
+  console.error('Neither LEAD_WEBHOOK_URL nor NEXT_PUBLIC_FORMSPREE_WEBHOOK is set — nothing to replay to.');
   process.exit(1);
 }
 
-console.log(`${entries.length} failed delivery/deliveries found. Target: ${config.webhook.url}`);
+console.log(`${entries.length} failed delivery/deliveries found. Targets: ${targets.join(', ')}`);
 const stillFailing = [];
 
 for (const entry of entries) {
@@ -42,7 +43,13 @@ for (const entry of entries) {
     console.log(`- ${reference} ${entry.payload?.lead?.email ?? ''} failed_at=${entry.failed_at}`);
     continue;
   }
-  const result = await deliver(entry.payload);
+  // Older entries have no `destinations`, so replay them everywhere; newer ones
+  // record which destination failed, so only that one is retried.
+  const only = Array.isArray(entry.destinations) ? entry.destinations : null;
+  const result = await deliver(entry.payload, {
+    ...(only && !only.includes('webhook') ? { url: '' } : {}),
+    ...(only && !only.includes('formspree') ? { formspreeUrl: '' } : {}),
+  });
   if (result.delivery === 'delivered') {
     console.log(`✔ ${reference} delivered`);
   } else {

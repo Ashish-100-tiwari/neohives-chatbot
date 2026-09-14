@@ -35,6 +35,11 @@ before(async () => {
   process.env.JWT_SECRET = JWT_SECRET;
   process.env.LEAD_WEBHOOK_URL = `http://127.0.0.1:${receiver.address().port}/hook`;
   process.env.LEAD_WEBHOOK_SECRET = SECRET;
+  // Explicitly blank so a populated .env can never post test leads to the real
+  // Formspree form (dotenv does not overwrite keys that are already present).
+  process.env.NEXT_PUBLIC_FORMSPREE_WEBHOOK = '';
+  process.env.FORMSPREE_WEBHOOK = '';
+  process.env.WEBHOOK_MAX_LEAD_UPDATES = '3';
   process.env.RATE_LIMIT_MAX = '1000';
   process.env.MAX_TURNS_PER_CONVERSATION = '4';
   process.env.LOG_LEVEL = 'silent';
@@ -148,7 +153,7 @@ describe('chat', () => {
     assert.match(body.state, /^nhc1\./);
     assert.equal(body.stateStatus, 'new');
     assert.equal(body.turns, 1);
-    assert.deepEqual(body.missingFields, ['name', 'email', 'requirement']);
+    assert.deepEqual(body.missingFields, ['email', 'service_interest']);
     assert.equal(body.transcript.length, 2);
   });
 
@@ -201,6 +206,19 @@ describe('chat', () => {
     assert.ok(body.reply.includes(contactEmail), `expected the reply to offer ${contactEmail}`);
   });
 
+  it('reports a submission over the wire without leaking internal bookkeeping', async () => {
+    received.length = 0;
+    const body = await chat({
+      message: 'we want a customer dashboard, my email is wire@acme.io',
+    }).then((r) => r.json());
+
+    assert.ok(body.toolsUsed.includes('update_lead'));
+    assert.deepEqual(Object.keys(body.submitted).sort(), ['at', 'delivery', 'reference']);
+    assert.match(body.submitted.reference, /^NH-\d{6}-[0-9A-F]{6}$/);
+    assert.deepEqual(body.missingFields, []);
+    assert.equal(received.length, 1);
+  });
+
   it('streams the same turn over SSE', async () => {
     const res = await chat({ message: 'hello there', stream: true });
     assert.equal(res.headers.get('content-type'), 'text/event-stream');
@@ -214,7 +232,7 @@ describe('chat', () => {
 });
 
 describe('lead submission', () => {
-  /** Drives the tools directly — the mock model never confirms a submission itself. */
+  /** Drives the tools directly — the mock model won't volunteer a submission. */
   const submitVia = async (lead) => {
     const { createConversation, mergeLead } = await import('../src/services/conversation.js');
     const { runTool } = await import('../src/agent/tools.js');
@@ -222,24 +240,112 @@ describe('lead submission', () => {
     mergeLead(conversation, lead);
     return {
       conversation,
-      result: await runTool('submit_lead', { confirmed_by_visitor: true, summary: 'Wants a portal.' }, { conversation }),
+      result: await runTool('submit_lead', { summary: 'Wants a portal.' }, { conversation }),
     };
   };
 
-  it('refuses to submit without visitor confirmation', async () => {
-    const { createConversation, mergeLead } = await import('../src/services/conversation.js');
+  /** The real path: fields arrive through update_lead, which submits by itself. */
+  const captureVia = async (...updates) => {
+    const { createConversation } = await import('../src/services/conversation.js');
     const { runTool } = await import('../src/agent/tools.js');
-    const conversation = createConversation();
-    mergeLead(conversation, { name: 'A', email: 'a@b.co', requirement: 'x' });
-    const result = await runTool('submit_lead', { confirmed_by_visitor: false, summary: 's' }, { conversation });
-    assert.equal(result.ok, false);
-    assert.match(result.error, /confirmation/);
-  });
+    const conversation = createConversation({ pageUrl: 'https://neohives.com/pricing' });
+    const results = [];
+    for (const fields of updates) {
+      results.push(await runTool('update_lead', fields, { conversation }));
+    }
+    return { conversation, results, result: results.at(-1) };
+  };
 
   it('refuses to submit an incomplete lead', async () => {
     const { result } = await submitVia({ name: 'Sam' });
     assert.equal(result.ok, false);
-    assert.deepEqual(result.missing, ['email', 'requirement']);
+    assert.deepEqual(result.missing, ['email', 'service_interest']);
+  });
+
+  it('does not submit on an email alone', async () => {
+    received.length = 0;
+    const { result } = await captureVia({ name: 'Sam', email: 'sam@acme.io' });
+    assert.equal(result.ready_to_submit, false);
+    assert.deepEqual(result.still_missing, ['service_interest']);
+    assert.equal(result.auto_submitted, undefined);
+    assert.equal(received.length, 0, 'webhook must not fire without a service interest');
+  });
+
+  it('does not submit on a service interest alone', async () => {
+    received.length = 0;
+    const { result } = await captureVia({ service_interest: 'Web development' });
+    assert.equal(result.ready_to_submit, false);
+    assert.deepEqual(result.still_missing, ['email']);
+    assert.equal(received.length, 0, 'webhook must not fire without an email');
+  });
+
+  it('does not submit on an unparseable email', async () => {
+    received.length = 0;
+    const { result } = await captureVia({ email: 'sam at acme dot io', service_interest: 'Voice AI' });
+    assert.equal(result.ok, false, 'the invalid email should be rejected outright');
+    assert.equal(received.length, 0);
+  });
+
+  it('submits automatically as soon as it has an email and a service', async () => {
+    received.length = 0;
+    const { result, conversation } = await captureVia({
+      name: 'Auto Rao',
+      email: 'auto@acme.io',
+      service_interest: 'AI agents & automation',
+    });
+
+    assert.equal(result.ready_to_submit, true);
+    assert.equal(result.auto_submitted.ok, true);
+    assert.equal(result.auto_submitted.delivery, 'delivered');
+    assert.match(result.auto_submitted.reference, /^NH-\d{6}-[0-9A-F]{6}$/);
+    assert.equal(conversation.submissions.length, 1);
+    assert.equal(conversation.submissions[0].trigger, 'auto');
+
+    assert.equal(received.length, 1);
+    assert.equal(received[0].json.event, 'lead.submitted');
+    assert.equal(received[0].json.lead.email, 'auto@acme.io');
+    assert.equal(received[0].json.lead.service_interest, 'AI agents & automation');
+  });
+
+  it('forwards detail learned after the first submission as an update', async () => {
+    received.length = 0;
+    const { results } = await captureVia(
+      { email: 'later@acme.io', service_interest: 'Private RAG / document AI' },
+      { budget_range: '$15k', timeline: 'next quarter' },
+    );
+
+    const reference = results[0].auto_submitted.reference;
+    assert.deepEqual(results[1].forwarded_update.updated_fields, ['budget_range', 'timeline']);
+    assert.equal(results[1].forwarded_update.reference, reference, 'updates reuse the original reference');
+
+    assert.equal(received.length, 2);
+    assert.equal(received[1].json.event, 'lead.updated');
+    assert.equal(received[1].json.reference, reference);
+    assert.equal(received[1].json.lead.budget_range, '$15k');
+  });
+
+  it('sends no update when nothing new was learned', async () => {
+    received.length = 0;
+    const { results } = await captureVia(
+      { email: 'same@acme.io', service_interest: 'Mobile app development' },
+      { email: 'same@acme.io' },
+    );
+    assert.equal(results[1].forwarded_update, undefined);
+    assert.equal(received.length, 1);
+  });
+
+  it('caps follow-up updates per conversation', async () => {
+    received.length = 0;
+    const { config } = await import('../src/config.js');
+    await captureVia(
+      { email: 'chatty@acme.io', service_interest: 'Cloud engineering' },
+      { phone: '+91 90000 00001' },
+      { company: 'Acme' },
+      { country: 'India' },
+      { industry: 'Logistics' },
+      { timeline: 'Q3' },
+    );
+    assert.equal(received.length, 1 + config.webhook.maxLeadUpdates);
   });
 
   it('delivers a signed payload to the webhook', async () => {
@@ -249,6 +355,7 @@ describe('lead submission', () => {
       email: 'sam@acme.io',
       phone: '+91 90000 00000',
       company: 'Acme',
+      service_interest: 'Web development',
       requirement: 'Client portal with billing',
       budget_range: '2-3 lakh',
     });
@@ -268,11 +375,105 @@ describe('lead submission', () => {
 
   it('does not re-send a replayed conversation state', async () => {
     received.length = 0;
-    const lead = { name: 'Replay Test', email: 'replay@acme.io', requirement: 'Same enquiry twice' };
+    const lead = { name: 'Replay Test', email: 'replay@acme.io', service_interest: 'QA & testing' };
     const first = await submitVia(lead);
     const second = await submitVia(lead); // fresh conversation, identical lead
     assert.equal(received.length, 1, 'webhook should fire only once');
     assert.equal(second.result.already_submitted, true);
     assert.equal(second.result.reference, first.result.reference);
+  });
+
+  it('is idempotent when submit_lead follows an automatic submission', async () => {
+    received.length = 0;
+    const { createConversation } = await import('../src/services/conversation.js');
+    const { runTool } = await import('../src/agent/tools.js');
+    const conversation = createConversation();
+    const auto = await runTool(
+      'update_lead',
+      { email: 'idem@acme.io', service_interest: 'UI/UX design' },
+      { conversation },
+    );
+    const explicit = await runTool('submit_lead', { summary: 'Redesign of the marketing site.' }, { conversation });
+
+    assert.equal(explicit.already_submitted, true);
+    assert.equal(explicit.reference, auto.auto_submitted.reference);
+    assert.equal(conversation.submissions.length, 1);
+    // One submission plus one update carrying the summary — never a second lead.
+    assert.equal(received.length, 2);
+    assert.equal(received[1].json.event, 'lead.updated');
+    assert.match(received[1].json.lead.notes, /Redesign of the marketing site/);
+  });
+});
+
+describe('formspree payload', () => {
+  const build = async (payload) => {
+    const { buildFormspreePayload, buildPayload } = await import('../src/services/webhook.js');
+    return buildFormspreePayload(buildPayload(payload));
+  };
+
+  it('recognises a formspree endpoint', async () => {
+    const { isFormspreeUrl } = await import('../src/services/webhook.js');
+    assert.equal(isFormspreeUrl('https://formspree.io/f/myeyjqpa'), true);
+    assert.equal(isFormspreeUrl('https://formspree.io.evil.test/f/x'), false);
+    assert.equal(isFormspreeUrl('http://127.0.0.1:4010/hook'), false);
+    assert.equal(isFormspreeUrl('not a url'), false);
+  });
+
+  it('flattens the lead into form fields with a readable message', async () => {
+    const flat = await build({
+      event: 'lead.submitted',
+      reference: 'NH-260914-ABCDEF',
+      lead: {
+        name: 'Priya N',
+        email: 'priya@acme.io',
+        service_interest: 'Voice AI',
+        requirement: 'Automate inbound support calls',
+        budget_range: '$20k',
+      },
+      conversation: { id: 'c1', origin: { pageUrl: 'https://neohives.com/pricing' } },
+      transcript: [{ role: 'user', content: 'We get 400 calls a day' }],
+      extra: { summary: 'Inbound voice agent for support.' },
+    });
+
+    // Formspree uses `email` as the reply-to address, so it must stay top level.
+    assert.equal(flat.email, 'priya@acme.io');
+    assert.equal(flat.name, 'Priya N');
+    assert.equal(flat.service_interest, 'Voice AI');
+    assert.equal(flat.budget_range, '$20k');
+    assert.equal(flat.reference, 'NH-260914-ABCDEF');
+    assert.equal(flat.page_url, 'https://neohives.com/pricing');
+    assert.match(flat._subject, /New lead: Voice AI — Priya N \[NH-260914-ABCDEF\]/);
+    assert.match(flat.message, /Requirement: Automate inbound support calls/);
+    assert.match(flat.message, /Inbound voice agent for support\./);
+    assert.match(flat.transcript, /Visitor: We get 400 calls a day/);
+
+    // Nested objects would be dropped by Formspree, and blanks read as missing.
+    for (const [key, value] of Object.entries(flat)) {
+      assert.equal(typeof value, 'string', `${key} must be a string`);
+      assert.notEqual(value, '', `${key} must not be blank`);
+    }
+  });
+
+  it('clamps a long transcript so formspree accepts the submission', async () => {
+    const flat = await build({
+      event: 'lead.submitted',
+      reference: 'NH-260914-000001',
+      lead: { email: 'big@acme.io', service_interest: 'Web development', notes: 'x'.repeat(20_000) },
+      transcript: Array.from({ length: 200 }, () => ({ role: 'user', content: 'y'.repeat(500) })),
+    });
+    assert.ok(flat.transcript.length <= 8000, `transcript was ${flat.transcript.length} chars`);
+    assert.ok(flat.notes.length <= 4000, `notes was ${flat.notes.length} chars`);
+  });
+
+  it('labels an escalation differently', async () => {
+    const flat = await build({
+      event: 'lead.escalated',
+      reference: 'NH-ESC-260914-ABCDEF',
+      lead: { email: 'legal@acme.io', service_interest: 'IT consulting' },
+      extra: { escalation: { reason: 'Wants a DPA review', urgency: 'high' } },
+    });
+    assert.match(flat._subject, /^Escalation:/);
+    assert.equal(flat.escalation_reason, 'Wants a DPA review');
+    assert.equal(flat.escalation_urgency, 'high');
   });
 });

@@ -37,7 +37,15 @@ function responseBody(conversation, { reply, toolsUsed, stateStatus }) {
     turns: conversation.turns,
     lead: conversation.lead,
     missingFields: missingRequiredFields(conversation.lead),
-    submitted: conversation.submissions.at(-1) ?? null,
+    // Only the three fields the widget renders — `trigger`/`sentFields`/`updates`
+    // are internal bookkeeping and stay in the (opaque) state blob.
+    submitted: conversation.submissions[0]
+      ? {
+          reference: conversation.submissions[0].reference,
+          at: conversation.submissions[0].at,
+          delivery: conversation.submissions[0].delivery,
+        }
+      : null,
     escalated: conversation.escalations.length > 0,
     toolsUsed,
     stateStatus,

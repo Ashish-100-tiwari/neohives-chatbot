@@ -56,9 +56,17 @@ export const config = {
 
   webhook: {
     url: process.env.LEAD_WEBHOOK_URL ?? '',
+    // Formspree is delivered to as a second, independent destination so the
+    // sales inbox gets the lead even when no CRM webhook is configured. It
+    // receives a flattened, email-friendly payload (see services/webhook.js).
+    formspreeUrl: process.env.NEXT_PUBLIC_FORMSPREE_WEBHOOK ?? process.env.FORMSPREE_WEBHOOK ?? '',
     secret: process.env.LEAD_WEBHOOK_SECRET ?? '',
     timeoutMs: num(process.env.WEBHOOK_TIMEOUT_MS, 10_000),
     maxRetries: num(process.env.WEBHOOK_MAX_RETRIES, 3),
+    // The lead is sent the moment email + service are known, so later answers
+    // (budget, volumes, timeline) arrive as follow-up `lead.updated` events.
+    // Capped so a long chat can't spam the sales inbox.
+    maxLeadUpdates: num(process.env.WEBHOOK_MAX_LEAD_UPDATES, 3),
   },
 
   // The conversation lives in the browser's localStorage as a signed blob;
@@ -101,5 +109,6 @@ export function describeConfig() {
     llm: config.openai.mock ? 'mock' : 'openai',
     webhookConfigured: Boolean(config.webhook.url),
     webhookSigned: Boolean(config.webhook.secret),
+    formspreeConfigured: Boolean(config.webhook.formspreeUrl),
   };
 }

@@ -7,10 +7,11 @@ import {
   lookupServices,
   lookupTechStack,
 } from '../data/knowledge.js';
-import { leadFieldsSchema, missingRequiredFields, validateForSubmit } from '../services/leadSchema.js';
+import { leadFieldsSchema, isReadyToSubmit, missingRequiredFields, validateForSubmit } from '../services/leadSchema.js';
 import { mergeLead, toTranscript } from '../services/conversation.js';
 import { findSubmission, fingerprintLead, recordSubmission } from '../services/dedupe.js';
 import { buildPayload, deliver, newReference } from '../services/webhook.js';
+import { config } from '../config.js';
 import { logger } from '../logger.js';
 
 /** OpenAI tool (function-calling) definitions. */
@@ -147,17 +148,21 @@ export const toolDefinitions = [
     function: {
       name: 'update_lead',
       description:
-        'Save or update what you know about the visitor. Merges with anything saved earlier, so send only the new fields. Call this as soon as you learn a detail.',
+        'Save or update what you know about the visitor. Merges with anything saved earlier, so send only the new fields. Call this as soon as you learn a detail. IMPORTANT: the moment both `email` and `service_interest` are known this tool sends the enquiry to the sales team by itself and returns a reference id — read `auto_submitted` in the result and give the visitor that reference. Anything you learn afterwards is forwarded automatically too, so keep calling this for the rest of the chat.',
       parameters: {
         type: 'object',
         properties: {
           name: { type: 'string', description: "Visitor's full name." },
-          email: { type: 'string', description: 'Work email address.' },
+          email: { type: 'string', description: 'Work email address. Required before the enquiry can be sent — ask for it early.' },
           phone: { type: 'string', description: 'Phone or WhatsApp number, with country code if given.' },
           company: { type: 'string', description: 'Company or brand name.' },
           country: { type: 'string', description: 'Country they operate from.' },
           industry: { type: 'string', description: 'Their industry or sector.' },
-          service_interest: { type: 'string', description: 'Service or AI engagement model they are interested in.' },
+          service_interest: {
+            type: 'string',
+            description:
+              'The service or AI engagement model they are looking for, e.g. "AI agents & automation", "private RAG / document AI", "voice AI", "web development", "mobile app", "UI/UX", "QA & testing", "cloud", "IT consulting", "digital marketing". Required before the enquiry can be sent — set it as soon as the visitor makes their need clear, even loosely.',
+          },
           requirement: { type: 'string', description: 'The business problem and what they want built, in their words.' },
           current_technology: { type: 'string', description: 'Systems and tools they use today (CRM, ERP, helpdesk, stack).' },
           required_integrations: { type: 'string', description: 'Systems the solution must integrate with.' },
@@ -177,20 +182,16 @@ export const toolDefinitions = [
     function: {
       name: 'submit_lead',
       description:
-        'Send the captured lead to the Neo Hives sales team. Call this ONLY after the visitor has confirmed your read-back summary. Returns a reference id to give the visitor.',
+        'Send the captured lead to the Neo Hives sales team. Usually unnecessary: update_lead sends the enquiry automatically once email and service_interest are known. Use this only to attach a summary for the sales team, or if update_lead reported that the lead was not sent. Safe to call twice — it returns the existing reference instead of sending again.',
       parameters: {
         type: 'object',
         properties: {
-          confirmed_by_visitor: {
-            type: 'boolean',
-            description: 'True only if the visitor explicitly confirmed their details are correct.',
-          },
           summary: {
             type: 'string',
             description: 'One or two sentence summary of the enquiry for the sales team.',
           },
         },
-        required: ['confirmed_by_visitor', 'summary'],
+        required: ['summary'],
         additionalProperties: false,
       },
     },
@@ -215,6 +216,119 @@ export const toolDefinitions = [
 ];
 
 /**
+ * Sends the enquiry to the webhook. Called automatically by `update_lead` the
+ * moment email + service_interest are known — the model is not trusted to
+ * remember to submit, and a lead with a reply-to address and a stated need is
+ * already worth routing to sales.
+ *
+ * Idempotent: an already-submitted conversation gets its original reference back.
+ */
+async function sendLead(conversation, { summary, trigger = 'auto' } = {}) {
+  const validation = validateForSubmit(conversation.lead);
+  if (!validation.ok) {
+    return { ok: false, error: validation.error, missing: validation.missing };
+  }
+
+  if (conversation.submissions.length) {
+    const previous = conversation.submissions[0];
+    return {
+      ok: true,
+      already_submitted: true,
+      reference: previous.reference,
+      message: 'This enquiry was already sent. Give the visitor the same reference id.',
+    };
+  }
+
+  // Guards against a replayed conversation state re-sending the same enquiry.
+  const fingerprint = fingerprintLead(conversation.lead);
+  const duplicate = findSubmission(fingerprint);
+  if (duplicate) {
+    conversation.submissions.push({
+      reference: duplicate.reference,
+      at: new Date().toISOString(),
+      delivery: 'duplicate',
+      sentFields: Object.keys(conversation.lead),
+      updates: 0,
+    });
+    return {
+      ok: true,
+      already_submitted: true,
+      reference: duplicate.reference,
+      message: 'We already have this enquiry. Give the visitor the same reference id.',
+    };
+  }
+
+  if (summary) {
+    mergeLead(conversation, { notes: [conversation.lead.notes, summary].filter(Boolean).join(' | ') });
+  }
+
+  const reference = newReference();
+  const payload = buildPayload({
+    event: 'lead.submitted',
+    conversation,
+    lead: conversation.lead,
+    reference,
+    transcript: toTranscript(conversation),
+    extra: { summary: summary ?? null, trigger },
+  });
+  const result = await deliver(payload);
+  recordSubmission(fingerprint, reference);
+  conversation.submissions.push({
+    reference,
+    at: new Date().toISOString(),
+    delivery: result.delivery,
+    trigger,
+    // What sales has already seen, so later answers can be sent as an update.
+    sentFields: Object.keys(conversation.lead),
+    updates: 0,
+  });
+
+  logger.info(
+    { reference, trigger, delivery: result.delivery, conversationId: conversation.id },
+    'lead submitted',
+  );
+
+  return {
+    ok: true,
+    reference,
+    delivery: result.delivery,
+    message: `Lead sent to the sales team. Tell the visitor their reference is ${reference} and that a senior engineer replies within one business day.`,
+  };
+}
+
+/**
+ * Because the lead goes out as soon as email + service are known, the richer
+ * answers (budget, volumes, integrations, timeline) usually arrive afterwards.
+ * Those are forwarded as `lead.updated` against the same reference, capped so a
+ * long conversation cannot flood the sales inbox.
+ */
+async function sendLeadUpdate(conversation) {
+  const submission = conversation.submissions[0];
+  if (!submission) return null;
+  if ((submission.updates ?? 0) >= config.webhook.maxLeadUpdates) return null;
+
+  const alreadySent = new Set(submission.sentFields ?? []);
+  const updatedFields = Object.keys(conversation.lead).filter(
+    (field) => conversation.lead[field] && !alreadySent.has(field),
+  );
+  if (!updatedFields.length) return null;
+
+  const payload = buildPayload({
+    event: 'lead.updated',
+    conversation,
+    lead: conversation.lead,
+    reference: submission.reference,
+    transcript: toTranscript(conversation),
+    extra: { updated_fields: updatedFields },
+  });
+  const result = await deliver(payload);
+
+  submission.updates = (submission.updates ?? 0) + 1;
+  submission.sentFields = [...alreadySent, ...updatedFields];
+  return { reference: submission.reference, delivery: result.delivery, updated_fields: updatedFields };
+}
+
+/**
  * Tool implementations. Each receives (args, { conversation }) and returns a
  * plain object that is JSON-stringified straight back to the model.
  */
@@ -233,7 +347,7 @@ const handlers = {
 
   search_faq: ({ query }) => ({ results: lookupFaq(query) }),
 
-  update_lead: (args, { conversation }) => {
+  update_lead: async (args, { conversation }) => {
     const parsed = leadFieldsSchema.safeParse(args ?? {});
     if (!parsed.success) {
       return {
@@ -243,71 +357,44 @@ const handlers = {
       };
     }
     const lead = mergeLead(conversation, parsed.data);
-    return {
+    const stillMissing = missingRequiredFields(lead);
+    const response = {
       ok: true,
       lead,
-      still_missing: missingRequiredFields(lead),
-      ready_to_submit: missingRequiredFields(lead).length === 0,
+      still_missing: stillMissing,
+      ready_to_submit: stillMissing.length === 0,
     };
+
+    if (!isReadyToSubmit(lead)) return response;
+
+    // The trigger the whole flow hangs on: email + service_interest are in, so
+    // the enquiry goes to sales now rather than waiting for a confirmation the
+    // visitor may never give.
+    if (!conversation.submissions.length) {
+      const submission = await sendLead(conversation, { trigger: 'auto' });
+      response.auto_submitted = submission;
+      if (submission.ok) {
+        response.message = `The enquiry has been sent to the sales team automatically — reference ${submission.reference}. Give the visitor that reference and say a senior engineer replies within one business day. Do not call submit_lead.`;
+      }
+      return response;
+    }
+
+    const update = await sendLeadUpdate(conversation);
+    if (update) {
+      response.forwarded_update = update;
+      response.message = `Saved and forwarded to the sales team against reference ${update.reference}. No need to mention the reference again.`;
+    }
+    return response;
   },
 
-  submit_lead: async ({ confirmed_by_visitor, summary }, { conversation }) => {
-    if (!confirmed_by_visitor) {
-      return {
-        ok: false,
-        error: 'Not submitted: read the details back to the visitor and get an explicit confirmation first.',
-      };
-    }
-    const validation = validateForSubmit(conversation.lead);
-    if (!validation.ok) {
-      return { ok: false, error: validation.error, missing: validation.missing };
-    }
-    if (conversation.submissions.length) {
-      const previous = conversation.submissions.at(-1);
-      return {
-        ok: true,
-        already_submitted: true,
-        reference: previous.reference,
-        message: 'This enquiry was already sent. Give the visitor the same reference id.',
-      };
-    }
-
-    // Guards against a replayed conversation state re-sending the same enquiry.
-    const fingerprint = fingerprintLead(conversation.lead);
-    const duplicate = findSubmission(fingerprint);
-    if (duplicate) {
-      conversation.submissions.push({ reference: duplicate.reference, at: new Date().toISOString(), delivery: 'duplicate' });
-      return {
-        ok: true,
-        already_submitted: true,
-        reference: duplicate.reference,
-        message: 'We already have this enquiry. Give the visitor the same reference id.',
-      };
-    }
-
-    if (summary) {
+  submit_lead: async ({ summary }, { conversation }) => {
+    // Already auto-submitted? Attach the summary as an update so the sales team
+    // still gets it, and hand back the original reference.
+    if (conversation.submissions.length && summary) {
       mergeLead(conversation, { notes: [conversation.lead.notes, summary].filter(Boolean).join(' | ') });
+      await sendLeadUpdate(conversation);
     }
-
-    const reference = newReference();
-    const payload = buildPayload({
-      event: 'lead.submitted',
-      conversation,
-      lead: conversation.lead,
-      reference,
-      transcript: toTranscript(conversation),
-      extra: { summary: summary ?? null },
-    });
-    const result = await deliver(payload);
-    recordSubmission(fingerprint, reference);
-    conversation.submissions.push({ reference, at: new Date().toISOString(), delivery: result.delivery });
-
-    return {
-      ok: true,
-      reference,
-      delivery: result.delivery,
-      message: `Lead recorded. Tell the visitor their reference is ${reference} and that the team replies within one business day.`,
-    };
+    return sendLead(conversation, { summary, trigger: 'explicit' });
   },
 
   escalate_to_human: async ({ reason, urgency = 'normal' }, { conversation }) => {

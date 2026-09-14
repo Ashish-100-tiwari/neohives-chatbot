@@ -1,17 +1,22 @@
-# Neohives chatbot backend
+# Neo Hives chatbot backend
 
-Node.js backend for the **Neohives** website assistant ("Hive"). It sits between a
-prospective client and the sales team:
+Node.js backend for the **Neo Hives IT Solutions** website assistant ("Hive"). It sits
+between a prospective client and the sales team:
 
 1. answers questions about **services, pricing and onboarding** — strictly from a
    knowledge file, so it can't invent numbers;
 2. **captures the visitor's details** and what they need, conversationally;
-3. **submits the lead to a webhook** (n8n / Zapier / Make / your CRM) and hands the
-   visitor a reference id.
+3. **submits the lead the moment it has an email and a service interest** — to
+   Formspree (`NEXT_PUBLIC_FORMSPREE_WEBHOOK`) and/or a JSON webhook
+   (n8n / Zapier / Make / your CRM) — and hands the visitor a reference id.
 
 Express 5 + the OpenAI (ChatGPT) API with function calling. **One endpoint**, guarded
 by **one non-expiring JWT**, and **zero server-side session state** — the
 conversation lives in the browser's `localStorage`.
+
+**Deployed at <https://neohives-chatbot.onrender.com>** — `GET /health` for a liveness
+check, `/` for a reference widget. Frontend integration guide:
+[`docs/FRONTEND.md`](docs/FRONTEND.md).
 
 ---
 
@@ -22,7 +27,7 @@ npm install
 cp .env.example .env
 
 npm run token -- --secret   # prints JWT_SECRET (backend) + the JWT (frontend)
-# paste JWT_SECRET into this project's .env, then set OPENAI_API_KEY + LEAD_WEBHOOK_URL
+# paste JWT_SECRET into .env, then set OPENAI_API_KEY + NEXT_PUBLIC_FORMSPREE_WEBHOOK
 
 npm run dev                 # http://localhost:3000
 ```
@@ -33,7 +38,7 @@ widget should, and shows the captured lead after every turn.
 
 ```bash
 npm start          # production
-npm test           # 27 tests, no API key needed
+npm test           # 39 tests, no API key needed
 ```
 
 **Building the widget?** Hand your frontend developer
@@ -117,7 +122,7 @@ Response:
   "state": "nhc1.eJyNVE1v…",
   "conversationId": "7d2c…",
   "turns": 3,
-  "lead": { "name": "Sam", "email": "sam@acme.io", "requirement": "Client portal" },
+  "lead": { "name": "Sam", "email": "sam@acme.io", "service_interest": "Web development" },
   "missingFields": [],
   "submitted": { "reference": "NH-260912-A3F91C", "at": "…", "delivery": "delivered" },
   "escalated": false,
@@ -190,7 +195,7 @@ It runs ~2.5 KB after one turn and is capped by `MAX_HISTORY_MESSAGES` (30) and
 
 **What signing does not stop is replay** — a client can resend an older blob from
 before a lead was submitted. The turn cap plus an in-memory duplicate guard
-(`src/services/dedupe.js`: same email + requirement inside 6 hours returns the
+(`src/services/dedupe.js`: same email + service interest inside 6 hours returns the
 original reference instead of firing the webhook) cover that.
 
 Show the opening line from your own frontend — there's no endpoint for it. The exact
@@ -224,19 +229,62 @@ confused model can't spin.
 | `get_pricing` | Plans, service starting prices, retainers, discounts, payment terms |
 | `get_onboarding` | The 6 onboarding steps + what the client must provide |
 | `search_faq` | NDA, code ownership, international clients, scope changes |
-| `update_lead` | Merges newly learned visitor details into the conversation |
-| `submit_lead` | Validates, then POSTs the lead to the webhook; returns a reference |
+| `update_lead` | Merges newly learned visitor details — **and submits the lead itself** once it has an email + a service interest |
+| `submit_lead` | Explicit submission with a summary for sales; idempotent |
 | `escalate_to_human` | Flags custom pricing / legal / complaints for a human |
 
-`submit_lead` won't fire unless `name`, `email` and `requirement` are present **and**
-the model passes `confirmed_by_visitor: true`, and it's idempotent per conversation.
+---
+
+## When the lead is sent
+
+Submission is **not** left to the model's judgement. `update_lead` fires the webhook
+itself as soon as the conversation contains both:
+
+| Field | Why |
+| --- | --- |
+| `email` | a valid, reply-to-able address (`REQUIRED_FIELDS` in `src/services/leadSchema.js`) |
+| `service_interest` | what the visitor is actually looking for |
+
+Nothing else blocks it — not a name, not a confirmation from the visitor. A lead with
+an address and a stated need is worth routing to sales; waiting for a read-back the
+visitor may never give is how leads get lost.
+
+The trade-off is that the richer answers (budget, volumes, integrations, timeline)
+usually arrive *after* the first send. Those are forwarded automatically as
+`lead.updated` events against the **same reference id**, capped at
+`WEBHOOK_MAX_LEAD_UPDATES` (default 3) per conversation so a long chat can't flood the
+inbox. Set it to `0` to disable follow-ups.
+
+`submit_lead` still exists for attaching a summary, and is safe to call twice — it
+returns the existing reference rather than sending a second lead.
 
 ---
 
 ## The webhook payload
 
-Every submission POSTs this to `LEAD_WEBHOOK_URL`. **Key names are stable** — map
-them once in n8n/Zapier and they won't move:
+There are two independent destinations; either, both or neither can be configured:
+
+| Env var | Payload |
+| --- | --- |
+| `NEXT_PUBLIC_FORMSPREE_WEBHOOK` | **Flattened** form fields (Formspree emails each key as a labelled row) |
+| `LEAD_WEBHOOK_URL` | The full **nested** JSON below |
+
+> `NEXT_PUBLIC_FORMSPREE_WEBHOOK` keeps the website's variable name so one value can
+> be pasted into both projects. Despite the `NEXT_PUBLIC_` prefix it is read only by
+> this backend and never reaches the browser. `FORMSPREE_WEBHOOK` also works.
+
+### Formspree
+
+The nested payload is flattened before it is POSTed, because Formspree is a
+form-to-email service rather than a JSON sink — it ignores nesting. `email` stays top
+level (Formspree uses it as the notification's reply-to), `_subject` becomes the
+subject line, and `message` carries a readable digest of the whole lead. Long values
+are clamped so a 40-turn transcript can't get the submission rejected. See
+`buildFormspreePayload` in `src/services/webhook.js`.
+
+### JSON webhook
+
+**Key names are stable** — map them once in n8n/Zapier and they won't move:
 
 ```json
 {
@@ -264,8 +312,13 @@ them once in n8n/Zapier and they won't move:
 }
 ```
 
-`event` is `lead.submitted` or `lead.escalated` (the latter adds
-`escalation: { reason, urgency }`).
+`event` is one of:
+
+| Event | When |
+| --- | --- |
+| `lead.submitted` | email + service interest captured — the first and only send per conversation |
+| `lead.updated` | detail learned afterwards; adds `updated_fields: [...]`, reuses the reference |
+| `lead.escalated` | adds `escalation: { reason, urgency }` |
 
 ### Verifying the signature
 
@@ -290,22 +343,33 @@ const expected = 'sha256=' + crypto.createHmac('sha256', SECRET).update(rawBody)
   npm run replay                # resend
   ```
 - Because the lead is safely on disk, the visitor still gets a reference id; the
-  `delivery` field (`delivered` / `queued` / `skipped` / `duplicate`) tells ops what
-  happened.
+  `delivery` field tells ops what happened:
+
+  | `delivery` | Meaning |
+  | --- | --- |
+  | `delivered` | every configured destination accepted it |
+  | `partial` | one destination accepted it, another didn't (the failed one is dead-lettered) |
+  | `queued` | every destination failed — needs a replay |
+  | `skipped` | no destination configured; saved to `data/leads.jsonl` only |
+  | `duplicate` | same email + service inside 6 hours; nothing was sent |
 
 ---
 
 ## Editing pricing and onboarding content
 
 `src/data/knowledge.json` is the bot's **only** source of commercial truth — the
-system prompt forbids inventing anything not in there. The placeholder plans, prices
-and onboarding steps in it are illustrative: **replace them with Neohives' real
-numbers before going live.**
+system prompt forbids inventing anything not in there. It is populated from the
+published neohives.com pages (services, AI pricing, process, security, tech stack, case
+studies); `sources` at the top of the file lists them.
 
 - In development the file hot-reloads on save.
 - In production, restart (or redeploy) to pick up edits.
-- `plans[].price` set to `null` (the *Scale* plan) means "quote only" and the prompt
-  blocks the model from guessing a figure.
+- Only the three AI engagement models have published prices. Every other service has
+  `startingPrice: null` plus a `pricingNote`, and the prompt blocks the model from
+  inventing a figure — it offers a fixed-price proposal instead.
+- `security.doNotClaim` and the top-level `guardrails` array are load-bearing: they stop
+  the bot claiming certifications it doesn't hold or making absolute data-handling
+  promises. Don't trim them when editing.
 
 Tone, the questions asked, and the escalation rules live in `src/agent/prompt.js`.
 
@@ -320,7 +384,7 @@ All via `.env` (see `.env.example`):
 | Auth | `JWT_SECRET` (required), `JWT_ISSUER`, `JWT_AUDIENCE`, `REVOKED_TOKEN_IDS` |
 | Memory | `STATE_SECRET` (defaults to `JWT_SECRET`), `MAX_HISTORY_MESSAGES`, `MAX_TURNS_PER_CONVERSATION`, `MAX_STATE_BYTES` |
 | Model | `OPENAI_API_KEY`, `OPENAI_MODEL`, `OPENAI_TEMPERATURE`, `OPENAI_MAX_OUTPUT_TOKENS`, `MOCK_LLM` |
-| Webhook | `LEAD_WEBHOOK_URL`, `LEAD_WEBHOOK_SECRET`, `WEBHOOK_TIMEOUT_MS`, `WEBHOOK_MAX_RETRIES` |
+| Webhook | `NEXT_PUBLIC_FORMSPREE_WEBHOOK`, `LEAD_WEBHOOK_URL`, `LEAD_WEBHOOK_SECRET`, `WEBHOOK_TIMEOUT_MS`, `WEBHOOK_MAX_RETRIES`, `WEBHOOK_MAX_LEAD_UPDATES` |
 | Server | `PORT`, `NODE_ENV`, `ALLOWED_ORIGINS`, `RATE_LIMIT_WINDOW_MS`, `RATE_LIMIT_MAX`, `LOG_LEVEL` |
 
 The server refuses to boot without a `JWT_SECRET` of at least 32 characters

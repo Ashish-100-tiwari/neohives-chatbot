@@ -31,11 +31,25 @@ export const leadFieldsSchema = z.object({
   notes: trimmed(2000).optional(),
 });
 
-/** Fields that must be present before a lead can be pushed to the webhook. */
-export const REQUIRED_FIELDS = ['name', 'email', 'requirement'];
+/**
+ * Fields that must be present before a lead is pushed to the webhook.
+ *
+ * Deliberately just two: an email to reply to and what the visitor wants. A
+ * qualified lead is worth more than a complete one, so the moment we have both
+ * the lead is sent (see agent/tools.js) and anything learned afterwards — name,
+ * budget, volumes, timeline — follows as a `lead.updated` event.
+ */
+export const REQUIRED_FIELDS = ['email', 'service_interest'];
+
+/** Asked for and forwarded, but never a reason to hold a lead back. */
+export const DESIRED_FIELDS = ['name', 'phone', 'company', 'requirement'];
 
 export function missingRequiredFields(lead) {
   return REQUIRED_FIELDS.filter((field) => !lead?.[field]);
+}
+
+export function isReadyToSubmit(lead) {
+  return missingRequiredFields(lead).length === 0 && EMAIL_RE.test(lead?.email ?? '');
 }
 
 /** Validates the lead as a whole, right before submission. */
